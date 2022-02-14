@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:validation="http://www.mulesoft.org/schema/mule/validation"
+	xmlns:batch="http://www.mulesoft.org/schema/mule/batch"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<file:config name="File_Config" doc:name="File Config" doc:id="4da69223-f9a5-40b6-8e58-be6f0416d9a5" >
+		<file:connection workingDir="C:\file" />
+	</file:config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="17434586-8b31-4333-9f53-10273675bf3c" >
+		<db:my-sql-connection host="localhost" port="3306" user="root" password="root" database="customer" />
+	</db:config>
+	<validation:config name="Validation_Config" doc:name="Validation Config" doc:id="28257140-d3bf-40e5-bb96-4a2a268b2963" />
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="7f1aae68-979c-4d8b-9b8e-5dc95d2cd250" basePath="/api" >
+		<http:request-connection host="apilayer.net" port="80" />
+	</http:request-config>
+	<db:config name="Database_Config1" doc:name="Database Config" doc:id="69c06b5f-d24d-4306-bf21-63c51685a899" >
+		<db:my-sql-connection host="congo.c3w6upfzlwwe.us-west-1.rds.amazonaws.com" port="3306" user="mulesoft" password="mulesoft" database="congo" />
+	</db:config>
+	<db:config name="Database_Config2" doc:name="Database Config" doc:id="df84815b-af7e-4ae2-b403-fc1542556947" >
+		<db:my-sql-connection host="localhost" port="3306" user="root" password="root" database="moderndatabase" />
+	</db:config>
+	<flow name="l1_projectFlow" doc:id="8e31afbf-5594-4321-9908-2ecc23874157" >
+		<file:listener doc:name="On New or Updated File" doc:id="82541d89-012d-48db-8486-571e8040fdcf" config-ref="File_Config" directory="C:\file\input" watermarkMode="MODIFIED_TIMESTAMP">
+			<scheduling-strategy >
+				<fixed-frequency />
+			</scheduling-strategy>
+		</file:listener>
+		<logger level="INFO" doc:name="Logger" doc:id="64346c76-d39f-4bbd-bb1b-0c10bd53f06a" message="flow started"/>
+		<ee:transform doc:name="Transform Message" doc:id="dd080685-2986-492f-a85e-32111ff938bc" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map (payload,index)->{
+	id: payload.id,
+	firstName: payload.first_name,
+	lastName: payload.last_name,
+	email: payload.email,
+	phone_number: payload.phone_number
+	
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<db:bulk-insert doc:name="Bulk insert" doc:id="da90ba74-aba7-4721-bebc-a107a3cf0bab" config-ref="Database_Config">
+			<db:bulk-input-parameters ><![CDATA[#[payload map {
+	id: $.id,
+	firstName: $.firstName,
+	lastName: $.lastName,
+	email: $.email,
+	phoneNumber: $.phone_number
+}]]]></db:bulk-input-parameters>
+			<db:sql ><![CDATA[insert into customerTable(id,first_name,last_name,email,phone_number) values(:id,:firstName,:lastName,:email,:phoneNumber) 
+ON DUPLICATE KEY UPDATE id=:id,first_name=:firstName,last_name=:lastName,email=:email,phone_number=:phoneNumber]]></db:sql>
+		</db:bulk-insert>
+		<db:select doc:name="Select" doc:id="29424940-2a93-4aac-b45e-eff4186cda5e" config-ref="Database_Config">
+			<db:sql ><![CDATA[select * from customerTable]]></db:sql>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="beb46be7-512e-4698-b685-212d6e659fef" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload map (payload,index)->{
+	id: payload.id,
+	firstName: payload.first_name,
+	lastName: payload.last_name,
+	email: payload.email,
+	phone_number: payload.phone_number
+	
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="email" ><![CDATA[%dw 2.0
+output application/java
+---
+payload map (payload,index)->{
+	
+	email: payload.email
+	
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<batch:job jobName="l1_projectBatch_Job" doc:id="5e7f3550-ee92-495c-9771-570d153ad6da" >
+			<batch:process-records >
+				<batch:step name="Batch_Step" doc:id="1d34f714-cdfd-4eb3-87ff-3cd4895158ca" >
+					<validation:matches-regex doc:name="Matches regex" doc:id="c3354400-ccb7-4702-afc8-c983f95112b3" config-ref="Validation_Config" value="#[payload.phone_number]" regex="^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s\./0-9]*$ "/>
+					<http:request method="GET" doc:name="Request" doc:id="8f306640-982e-4302-b1aa-0e2f88660fbd" config-ref="HTTP_Request_configuration" path="/validate" target="customer">
+						<http:query-params ><![CDATA[#[output application/java
+---
+{
+	number : payload.phone_number,
+	access_key : "31a0ef0f128bc5b93bc0bae1ebeb0baa"
+}]]]></http:query-params>
+					</http:request>
+					<choice doc:name="Choice" doc:id="4d027da4-0b61-46e8-8e8e-f9231085ce49" >
+						<when expression="#[vars.customer.valid == true]">
+							<flow-ref doc:name="Flow Reference" doc:id="97c6ed8b-c905-4cce-adcb-06d3694766dd" name="compareAndInsertIntoModernDatabase"/>
+						</when>
+						<when expression="#[vars.customer.valid == false]">
+							<db:insert doc:name="Bad Data" doc:id="5e011933-c760-48bd-a548-b513ed3a6fdd" config-ref="Database_Config">
+								<db:sql><![CDATA[insert into nonValid(id,first_name,last_name,email,phone_number) values(:id,:firstName,:lastName,:email,:phoneNumber) 
+ON DUPLICATE KEY UPDATE id=:id,first_name=:firstName,last_name=:lastName,email=:email,phone_number=:phoneNumber]]></db:sql>
+								<db:input-parameters><![CDATA[#[{
+	id: payload.id,
+	firstName: payload.firstName,
+	lastName: payload.lastName,
+	email: payload.email,
+	phoneNumber: payload.phone_number
+}]]]></db:input-parameters>
+							</db:insert>
+						</when>
+					</choice>
+				</batch:step>
+			</batch:process-records>
+		</batch:job>
+	</flow>
+	<sub-flow name="compareAndInsertIntoModernDatabase" doc:id="7aaa382b-7936-46d5-a0fd-c51a8f3f21ca" >
+		<ee:transform doc:name="Transform Message" doc:id="5ffd2157-2331-4fa7-8f45-0031ee901bf1" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	
+	firstName: payload.firstName,
+	lastName: payload.lastName,
+	email: payload.email
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="phoneAndEmail" ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	
+	email: payload.email,
+	phone: payload.phone_number
+	
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<db:select doc:name="Bu  Application" doc:id="22919cf5-6397-4fcd-a857-a8339f82d49b" config-ref="Database_Config1">
+			<db:sql><![CDATA[SELECT * FROM contacts  WHERE FirstName= :first_name OR LastName= :last_name]]></db:sql>
+			<db:input-parameters><![CDATA[#[{
+
+	first_name:payload.firstName,
+	last_name: payload.lastName
+	
+	}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="8c0c678e-ae4a-4295-9da3-455c57e33c68">
+				<ee:message>
+					<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+payload map(payload,index)-> {
+	firstName: payload.FirstName,
+	lastName: payload.LastName,
+	primaryEmail: vars.phoneAndEmail.email,
+	secondaryEmail: payload.Email,
+	company: payload.Company,
+	phone: vars.phoneAndEmail.phone
+	}]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+		<db:bulk-insert doc:name="Bulk insert" doc:id="2b9d2ee4-c10a-4fac-b2d5-9f8e5bfb5015" config-ref="Database_Config2">
+			<db:bulk-input-parameters ><![CDATA[#[payload map {
+	correctionId: correlationId,
+	firstName: $.firstName,
+	lastName: $.lastName,
+	primaryEmail: $.primaryEmail,
+	secondaryEmail: $.secondaryEmail,
+	company:$.company,
+	phone: $.phone
+	
+	}]]]></db:bulk-input-parameters>
+			<db:sql ><![CDATA[insert into validcustomer(correctionId,first_name,last_name,primaryEmail,secondaryEmail,company,phone) values(:correctionId,:firstName,:lastName,:primaryEmail,:secondaryEmail,:company,:phone)
+ON DUPLICATE KEY UPDATE correctionId=:correctionId,first_name=:firstName,last_name=:lastName,primaryEmail=:primaryEmail,secondaryEmail=:secondaryEmail,company=:company,phone=:phone]]></db:sql>
+		</db:bulk-insert>
+	</sub-flow>
+</mule>
